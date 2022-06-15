@@ -3,18 +3,23 @@ from torch.hub import load_state_dict_from_url
 
 
 '''
+修改的vgg,后面的几层在ssd.py中
+
 该代码用于获得VGG主干特征提取网络的输出。
 输入变量i代表的是输入图片的通道数，通常为3。
 
-300, 300, 3 -> 300, 300, 64 -> 300, 300, 64 -> 150, 150, 64 -> 150, 150, 128 -> 150, 150, 128 -> 75, 75, 128 ->
-75, 75, 256 -> 75, 75, 256 -> 75, 75, 256 -> 38, 38, 256 -> 38, 38, 512 -> 38, 38, 512 -> 38, 38, 512 -> 19, 19, 512 ->
-19, 19, 512 -> 19, 19, 512 -> 19, 19, 512 -> 19, 19, 512 -> 19, 19, 1024 -> 19, 19, 1024
+每行最后都是pooling,宽高减半
+300, 300, 3 -> 300, 300, 64 -> 300, 300, 64 -> 150, 150, 64 ->  conv1
+150, 150, 128 -> 150, 150, 128 -> 75, 75, 128 ->                conv2
+75, 75, 256 -> 75, 75, 256 -> 75, 75, 256 -> 38, 38, 256 ->     conv3
+38, 38, 512 -> 38, 38, 512 -> 38, 38, 512 -> 19, 19, 512 ->     conv4
+19, 19, 512 -> 19, 19, 512 -> 19, 19, 512 -> 19, 19, 512 ->     conv5
+19, 19, 1024 -> 19, 19, 1024  修改后新增的                       pool5 conv6 conv7
 
-38, 38, 512的序号是22
-19, 19, 1024的序号是34
+最后一个 38, 38, 512  的id是22
+最后一个 19, 19, 1024 的id是34
 '''
-base = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M',
-            512, 512, 512]
+base = [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'C', 512, 512, 512, 'M', 512, 512, 512]
 
 def vgg(pretrained = False):
     layers = []
@@ -23,20 +28,21 @@ def vgg(pretrained = False):
         if v == 'M':
             layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
         elif v == 'C':
-            layers += [nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)]
+            layers += [nn.MaxPool2d(kernel_size=2, stride=2, ceil_mode=True)]   # ceil_mode: False,右或下不足pool就舍弃;True就要
         else:
             conv2d = nn.Conv2d(in_channels, v, kernel_size=3, padding=1)
             layers += [conv2d, nn.ReLU(inplace=True)]
             in_channels = v
-    # 19, 19, 512 -> 19, 19, 512 
+    # 19, 19, 512 -> 19, 19, 512  stride=1 宽高不变
     pool5 = nn.MaxPool2d(kernel_size=3, stride=1, padding=1)
     # 19, 19, 512 -> 19, 19, 1024
     conv6 = nn.Conv2d(512, 1024, kernel_size=3, padding=6, dilation=6)
     # 19, 19, 1024 -> 19, 19, 1024
     conv7 = nn.Conv2d(1024, 1024, kernel_size=1)
     layers += [pool5, conv6,
-               nn.ReLU(inplace=True), conv7, nn.ReLU(inplace=True)]
+                nn.ReLU(inplace=True), conv7, nn.ReLU(inplace=True)]
 
+    # 放进列表中
     model = nn.ModuleList(layers)
     if pretrained:
         state_dict = load_state_dict_from_url("https://download.pytorch.org/models/vgg16-397923af.pth", model_dir="./model_data")

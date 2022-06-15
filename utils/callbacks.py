@@ -23,7 +23,7 @@ class LossHistory():
         self.log_dir    = log_dir
         self.losses     = []
         self.val_loss   = []
-        
+
         os.makedirs(self.log_dir)
         self.writer     = SummaryWriter(self.log_dir)
         try:
@@ -61,7 +61,7 @@ class LossHistory():
                 num = 5
             else:
                 num = 15
-            
+
             plt.plot(iters, scipy.signal.savgol_filter(self.losses, num, 3), 'green', linestyle = '--', linewidth = 2, label='smooth train loss')
             plt.plot(iters, scipy.signal.savgol_filter(self.val_loss, num, 3), '#8B4513', linestyle = '--', linewidth = 2, label='smooth val loss')
         except:
@@ -81,7 +81,7 @@ class EvalCallback():
     def __init__(self, net, input_shape, anchors, class_names, num_classes, val_lines, log_dir, cuda, \
             map_out_path=".temp_map_out", max_boxes=100, confidence=0.05, nms_iou=0.5, letterbox_image=True, MINOVERLAP=0.5, eval_flag=True, period=1):
         super(EvalCallback, self).__init__()
-        
+
         self.net                = net
         self.input_shape        = input_shape
         self.anchors            = anchors
@@ -98,13 +98,13 @@ class EvalCallback():
         self.MINOVERLAP         = MINOVERLAP
         self.eval_flag          = eval_flag
         self.period             = period
-        
+
         self.anchors            = torch.from_numpy(self.anchors).type(torch.FloatTensor)
         if self.cuda:
             self.anchors = self.anchors.cuda()
-        
+
         self.bbox_util = BBoxUtility(self.num_classes)
-        
+
         self.maps       = [0]
         self.epoches    = [0]
         if self.eval_flag:
@@ -115,45 +115,45 @@ class EvalCallback():
     def get_map_txt(self, image_id, image, class_names, map_out_path):
         f = open(os.path.join(map_out_path, "detection-results/"+image_id+".txt"),"w") 
         #---------------------------------------------------#
-        #   计算输入图片的高和宽
+        #   锟斤拷锟斤拷锟斤拷锟斤拷图片锟侥高和匡拷
         #---------------------------------------------------#
         image_shape = np.array(np.shape(image)[0:2])
         #---------------------------------------------------------#
-        #   在这里将图像转换成RGB图像，防止灰度图在预测时报错。
-        #   代码仅仅支持RGB图像的预测，所有其它类型的图像都会转化成RGB
+        #   锟斤拷锟斤拷锟斤将图锟斤拷转锟斤拷锟斤拷RGB图锟今，凤拷止锟揭讹拷图锟斤拷预锟斤拷时锟斤拷锟斤拷锟斤拷
+        #   锟斤拷锟斤拷锟斤拷锟街э拷锟絉GB图锟斤拷锟皆わ拷猓拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷偷锟酵硷拷穸蓟锟阶拷锟斤拷锟絉GB
         #---------------------------------------------------------#
         image       = cvtColor(image)
         #---------------------------------------------------------#
-        #   给图像增加灰条，实现不失真的resize
-        #   也可以直接resize进行识别
+        #   锟斤拷图锟斤拷锟斤拷锟接伙拷锟斤拷锟斤拷实锟街诧拷失锟斤拷锟絩esize
+        #   也锟斤拷锟斤拷直锟斤拷resize锟斤拷锟斤拷识锟斤拷
         #---------------------------------------------------------#
         image_data  = resize_image(image, (self.input_shape[1], self.input_shape[0]), self.letterbox_image)
         #---------------------------------------------------------#
-        #   添加上batch_size维度，图片预处理，归一化。
+        #   锟斤拷锟斤拷锟斤拷batch_size维锟饺ｏ拷图片预锟斤拷锟斤拷锟斤拷锟斤拷一锟斤拷锟斤拷
         #---------------------------------------------------------#
         image_data = np.expand_dims(np.transpose(preprocess_input(np.array(image_data, dtype='float32')), (2, 0, 1)), 0)
 
         with torch.no_grad():
             #---------------------------------------------------#
-            #   转化成torch的形式
+            #   转锟斤拷锟斤拷torch锟斤拷锟斤拷式
             #---------------------------------------------------#
             images = torch.from_numpy(image_data).type(torch.FloatTensor)
             if self.cuda:
                 images = images.cuda()
             #---------------------------------------------------------#
-            #   将图像输入网络当中进行预测！
+            #   锟斤拷图锟斤拷锟斤拷锟斤拷锟斤拷锟界当锟叫斤拷锟斤拷预锟解！
             #---------------------------------------------------------#
             outputs     = self.net(images)
             #-----------------------------------------------------------#
-            #   将预测结果进行解码
+            #   锟斤拷预锟斤拷锟斤拷锟斤拷锟叫斤拷锟斤拷
             #-----------------------------------------------------------#
             results     = self.bbox_util.decode_box(outputs, self.anchors, image_shape, self.input_shape, self.letterbox_image, 
                                                     nms_iou = self.nms_iou, confidence = self.confidence)
             #--------------------------------------#
-            #   如果没有检测到物体，则返回原图
+            #   锟斤拷锟矫伙拷屑锟解到锟斤拷锟藉，锟津返伙拷原图
             #--------------------------------------#
             if len(results[0]) <= 0:
-                return 
+                return
 
             top_label   = np.array(results[0][:, 4], dtype = 'int32')
             top_conf    = results[0][:, 5]
@@ -176,8 +176,8 @@ class EvalCallback():
             f.write("%s %s %s %s %s %s\n" % (predicted_class, score[:6], str(int(left)), str(int(top)), str(int(right)),str(int(bottom))))
 
         f.close()
-        return 
-    
+        return
+
     def on_epoch_end(self, epoch, model_eval):
         if epoch % self.period == 0 and self.eval_flag:
             self.net = model_eval
@@ -192,27 +192,27 @@ class EvalCallback():
                 line        = annotation_line.split()
                 image_id    = os.path.basename(line[0]).split('.')[0]
                 #------------------------------#
-                #   读取图像并转换成RGB图像
+                #   锟斤拷取图锟斤拷转锟斤拷锟斤拷RGB图锟斤拷
                 #------------------------------#
                 image       = Image.open(line[0])
                 #------------------------------#
-                #   获得预测框
+                #   锟斤拷锟皆わ拷锟斤拷
                 #------------------------------#
                 gt_boxes    = np.array([np.array(list(map(int,box.split(',')))) for box in line[1:]])
                 #------------------------------#
-                #   获得预测txt
+                #   锟斤拷锟皆わ拷锟絫xt
                 #------------------------------#
                 self.get_map_txt(image_id, image, self.class_names, self.map_out_path)
-                
+
                 #------------------------------#
-                #   获得真实框txt
+                #   锟斤拷锟斤拷锟绞碉拷锟絫xt
                 #------------------------------#
                 with open(os.path.join(self.map_out_path, "ground-truth/"+image_id+".txt"), "w") as new_f:
                     for box in gt_boxes:
                         left, top, right, bottom, obj = box
                         obj_name = self.class_names[obj]
                         new_f.write("%s %s %s %s %s\n" % (obj_name, left, top, right, bottom))
-                        
+
             print("Calculate Map.")
             try:
                 temp_map = get_coco_map(class_names = self.class_names, path = self.map_out_path)[1]
@@ -224,7 +224,7 @@ class EvalCallback():
             with open(os.path.join(self.log_dir, "epoch_map.txt"), 'a') as f:
                 f.write(str(temp_map))
                 f.write("\n")
-            
+
             plt.figure()
             plt.plot(self.epoches, self.maps, 'red', linewidth = 2, label='train map')
 

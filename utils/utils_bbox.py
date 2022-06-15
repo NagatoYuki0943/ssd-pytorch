@@ -35,6 +35,11 @@ class BBoxUtility(object):
         boxes *= np.concatenate([image_shape, image_shape], axis=-1)
         return boxes
 
+    """
+    解码
+    回归预测结果对先验框进行解码获取预测框
+    获取中心和宽高,转换为左上角和右下角
+    """
     def decode_boxes(self, mbox_loc, anchors, variances):
         # 获得先验框的宽与高
         anchor_width     = anchors[:, 2] - anchors[:, 0]
@@ -44,14 +49,14 @@ class BBoxUtility(object):
         anchor_center_y  = 0.5 * (anchors[:, 3] + anchors[:, 1])
 
         # 真实框距离先验框中心的xy轴偏移情况
-        decode_bbox_center_x = mbox_loc[:, 0] * anchor_width * variances[0]
-        decode_bbox_center_x += anchor_center_x
+        decode_bbox_center_x = mbox_loc[:, 0] * anchor_width * variances[0] # 1.乘以先验框宽高,乘以variances
+        decode_bbox_center_x += anchor_center_x                             # 2.加上先验框宽高  过程和编码过程相反
         decode_bbox_center_y = mbox_loc[:, 1] * anchor_height * variances[0]
         decode_bbox_center_y += anchor_center_y
-        
+
         # 真实框的宽与高的求取
-        decode_bbox_width   = torch.exp(mbox_loc[:, 2] * variances[1])
-        decode_bbox_width   *= anchor_width
+        decode_bbox_width   = torch.exp(mbox_loc[:, 2] * variances[1])      # 1.回归预测结果2和3乘以variances取指数
+        decode_bbox_width   *= anchor_width                                 # 2.乘上先验框宽高  过程和编码过程相反
         decode_bbox_height  = torch.exp(mbox_loc[:, 3] * variances[1])
         decode_bbox_height  *= anchor_height
 
@@ -70,13 +75,16 @@ class BBoxUtility(object):
         decode_bbox = torch.min(torch.max(decode_bbox, torch.zeros_like(decode_bbox)), torch.ones_like(decode_bbox))
         return decode_bbox
 
+    """
+    将预测结果进行划分
+    """
     def decode_box(self, predictions, anchors, image_shape, input_shape, letterbox_image, variances = [0.1, 0.2], nms_iou = 0.3, confidence = 0.5):
         #---------------------------------------------------#
         #   :4是回归预测结果
         #---------------------------------------------------#
         mbox_loc        = predictions[0]
         #---------------------------------------------------#
-        #   获得种类的置信度
+        #   分类预测结果,获得种类的置信度
         #---------------------------------------------------#
         mbox_conf       = nn.Softmax(-1)(predictions[1])
 
@@ -87,34 +95,41 @@ class BBoxUtility(object):
         for i in range(len(mbox_loc)):
             results.append([])
             #--------------------------------#
-            #   利用回归结果对先验框进行解码
+            #   利用回归结果对先验框进行解码 decode_boxes:通过回归预测结果对先验框进行解码获取预测框
             #--------------------------------#
             decode_bbox = self.decode_boxes(mbox_loc[i], anchors, variances)
 
+            #--------------------------------#
+            #   对种类进行循环
+            #--------------------------------#
             for c in range(1, self.num_classes):
                 #--------------------------------#
                 #   取出属于该类的所有框的置信度
+                #   range从1开始,0代表背景,不循环
                 #   判断是否大于门限
                 #--------------------------------#
+                # 取出置信度,如果大于confidence,就取出
                 c_confs     = mbox_conf[i, :, c]
                 c_confs_m   = c_confs > confidence
                 if len(c_confs[c_confs_m]) > 0:
                     #-----------------------------------------#
-                    #   取出得分高于confidence的框
+                    #   对每个种类进行非极大值抑制,取出得分高于confidence的框
                     #-----------------------------------------#
                     boxes_to_process = decode_bbox[c_confs_m]
                     confs_to_process = c_confs[c_confs_m]
 
                     keep = nms(
-                        boxes_to_process,
-                        confs_to_process,
+                        boxes_to_process,   # 坐标
+                        confs_to_process,   # 先验框置信度 * 种类置信度 结果是1维数据
                         nms_iou
                     )
                     #-----------------------------------------#
                     #   取出在非极大抑制中效果较好的内容
                     #-----------------------------------------#
                     good_boxes  = boxes_to_process[keep]
+                    # 坐标
                     confs       = confs_to_process[keep][:, None]
+                    # 标签
                     labels      = (c - 1) * torch.ones((len(keep), 1)).cuda() if confs.is_cuda else (c - 1) * torch.ones((len(keep), 1))
                     #-----------------------------------------#
                     #   将label、置信度、框的位置进行堆叠。
@@ -123,6 +138,7 @@ class BBoxUtility(object):
                     # 添加进result里
                     results[-1].extend(c_pred)
 
+            # 调整结果形式,图像添加了灰条,要调整于相对于原图的过程
             if len(results[-1]) > 0:
                 results[-1] = np.array(results[-1])
                 box_xy, box_wh = (results[-1][:, 0:2] + results[-1][:, 2:4])/2, results[-1][:, 2:4] - results[-1][:, 0:2]

@@ -1,7 +1,10 @@
-#-----------------------------------------------------------------------#
+"""
+要在ssd.py中设置model_path,classes_path,backbone,confidence,nms_iou等,和训练时参数相同
+"""
+#----------------------------------------------------#
 #   predict.py将单张图片预测、摄像头检测、FPS测试和目录遍历检测等功能
 #   整合到了一个py文件中，通过指定mode进行模式的修改。
-#-----------------------------------------------------------------------#
+#----------------------------------------------------#
 import time
 
 import cv2
@@ -44,7 +47,7 @@ if __name__ == "__main__":
     #----------------------------------------------------------------------------------------------------------#
     #   test_interval       用于指定测量fps的时候，图片检测的次数。理论上test_interval越大，fps越准确。
     #   fps_image_path      用于指定测试的fps图片
-    #   
+    #
     #   test_interval和fps_image_path仅在mode='fps'有效
     #----------------------------------------------------------------------------------------------------------#
     test_interval   = 100
@@ -52,7 +55,7 @@ if __name__ == "__main__":
     #-------------------------------------------------------------------------#
     #   dir_origin_path     指定了用于检测的图片的文件夹路径
     #   dir_save_path       指定了检测完图片的保存路径
-    #   
+    #
     #   dir_origin_path和dir_save_path仅在mode='dir_predict'时有效
     #-------------------------------------------------------------------------#
     dir_origin_path = "img/"
@@ -63,7 +66,7 @@ if __name__ == "__main__":
     #-------------------------------------------------------------------------#
     simplify        = True
     onnx_save_path  = "model_data/models.onnx"
-    
+
     if mode == "predict":
         '''
         1、如果想要进行检测完的图片的保存，利用r_image.save("img.jpg")即可保存，直接在predict.py里进行修改即可。 
@@ -85,11 +88,11 @@ if __name__ == "__main__":
                 r_image.show()
 
     elif mode == "video":
-        capture = cv2.VideoCapture(video_path)
+        capture=cv2.VideoCapture(video_path)
         if video_save_path!="":
-            fourcc  = cv2.VideoWriter_fourcc(*'XVID')
-            size    = (int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)), int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
-            out     = cv2.VideoWriter(video_save_path, fourcc, video_fps, size)
+            fourcc = cv2.VideoWriter_fourcc(*'XVID')
+            size = (int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)), int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+            out = cv2.VideoWriter(video_save_path, fourcc, video_fps, size)
 
         ref, frame = capture.read()
         if not ref:
@@ -110,13 +113,13 @@ if __name__ == "__main__":
             frame = np.array(ssd.detect_image(frame))
             # RGBtoBGR满足opencv显示格式
             frame = cv2.cvtColor(frame,cv2.COLOR_RGB2BGR)
-            
+
             fps  = ( fps + (1./(time.time()-t1)) ) / 2
             print("fps= %.2f"%(fps))
             frame = cv2.putText(frame, "fps= %.2f"%(fps), (0, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            
+
             cv2.imshow("video",frame)
-            c= cv2.waitKey(1) & 0xff 
+            c= cv2.waitKey(1) & 0xff
             if video_save_path!="":
                 out.write(frame)
 
@@ -130,7 +133,7 @@ if __name__ == "__main__":
             print("Save processed video to the path :" + video_save_path)
             out.release()
         cv2.destroyAllWindows()
-        
+
     elif mode == "fps":
         img = Image.open(fps_image_path)
         tact_time = ssd.get_FPS(img, test_interval)
@@ -138,7 +141,6 @@ if __name__ == "__main__":
 
     elif mode == "dir_predict":
         import os
-
         from tqdm import tqdm
 
         img_names = os.listdir(dir_origin_path)
@@ -153,6 +155,6 @@ if __name__ == "__main__":
 
     elif mode == "export_onnx":
         ssd.convert_to_onnx(simplify, onnx_save_path)
-        
+
     else:
         raise AssertionError("Please specify the correct mode: 'predict', 'video', 'fps' or 'dir_predict'.")

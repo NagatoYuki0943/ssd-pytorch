@@ -1,3 +1,7 @@
+"""
+理解先验框
+"""
+
 import numpy as np
 
 
@@ -108,7 +112,7 @@ def get_vgg_output_length(height, width):
         feature_heights.append(height)
         feature_widths.append(width)
     return np.array(feature_heights)[-6:], np.array(feature_widths)[-6:]
-    
+
 def get_mobilenet_output_length(height, width):
     filter_sizes    = [3, 3, 3, 3, 3, 3, 3, 3, 3]
     padding         = [1, 1, 1, 1, 1, 1, 1, 1, 1]
@@ -130,15 +134,16 @@ def get_anchors(input_shape = [300,300], anchors_size = [30, 60, 111, 162, 213, 
     else:
         feature_heights, feature_widths = get_mobilenet_output_length(input_shape[0], input_shape[1])
         aspect_ratios = [[1, 2, 3], [1, 2, 3], [1, 2, 3], [1, 2, 3], [1, 2, 3], [1, 2, 3]]
-        
+
     anchors = []
     for i in range(len(feature_heights)):
-        anchor_boxes = AnchorBox(input_shape, anchors_size[i], max_size = anchors_size[i+1], 
+        anchor_boxes = AnchorBox(input_shape, anchors_size[i], max_size = anchors_size[i+1],
                     aspect_ratios = aspect_ratios[i]).call([feature_heights[i], feature_widths[i]])
         anchors.append(anchor_boxes)
 
     anchors = np.concatenate(anchors, axis=0)
     return anchors
+
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
@@ -152,6 +157,7 @@ if __name__ == '__main__':
             # 先验框的长边
             self.max_size = max_size
 
+            # 每一个数字代表两个值, 1 获取 2 1/2
             # [1, 2] => [1, 1, 2, 1/2]
             # [1, 2, 3] => [1, 1, 2, 1/2, 3, 1/3]
             self.aspect_ratios = []
@@ -172,7 +178,7 @@ if __name__ == '__main__':
             # --------------------------------- #
             img_height  = self.input_shape[0]
             img_width   = self.input_shape[1]
-            
+
             box_widths  = []
             box_heights = []
             # --------------------------------- #
@@ -181,22 +187,23 @@ if __name__ == '__main__':
             #   [1, 1, 2, 1/2, 3, 1/3]
             # --------------------------------- #
             for ar in self.aspect_ratios:
-                # 首先添加一个较小的正方形
+                # 首先添加一个较小的正方形,根据短边构造
                 if ar == 1 and len(box_widths) == 0:
                     box_widths.append(self.min_size)
                     box_heights.append(self.min_size)
-                # 然后添加一个较大的正方形
+                # 然后添加一个较大的正方形,结合短边和长边
                 elif ar == 1 and len(box_widths) > 0:
                     box_widths.append(np.sqrt(self.min_size * self.max_size))
                     box_heights.append(np.sqrt(self.min_size * self.max_size))
-                # 然后添加长方形
+                # 然后添加长方形,短边的平方
                 elif ar != 1:
                     box_widths.append(self.min_size * np.sqrt(ar))
                     box_heights.append(self.min_size / np.sqrt(ar))
 
+            # 打印每个框的高宽
             print("box_widths:", box_widths)
             print("box_heights:", box_heights)
-            
+
             # --------------------------------- #
             #   获得所有先验框的宽高1/2
             # --------------------------------- #
@@ -212,6 +219,8 @@ if __name__ == '__main__':
 
             # --------------------------------- #
             #   生成网格中心
+            #   起始位置,结束位置,步长
+            #   0.5是让中心在正中心,而不是左上角
             # --------------------------------- #
             linx = np.linspace(0.5 * step_x, img_width - 0.5 * step_x, layer_width)
             liny = np.linspace(0.5 * step_y, img_height - 0.5 * step_y, layer_height)
@@ -244,7 +253,7 @@ if __name__ == '__main__':
                 rect2 = plt.Rectangle([anchor_boxes[4, 4],anchor_boxes[4, 5]],box_widths[1]*2,box_heights[1]*2,color="r",fill=False)
                 rect3 = plt.Rectangle([anchor_boxes[4, 8],anchor_boxes[4, 9]],box_widths[2]*2,box_heights[2]*2,color="r",fill=False)
                 rect4 = plt.Rectangle([anchor_boxes[4, 12],anchor_boxes[4, 13]],box_widths[3]*2,box_heights[3]*2,color="r",fill=False)
-                
+
                 ax.add_patch(rect1)
                 ax.add_patch(rect2)
                 ax.add_patch(rect3)
@@ -252,6 +261,7 @@ if __name__ == '__main__':
 
                 plt.show()
             # --------------------------------- #
+            #   先验框除以图片宽高
             #   将先验框变成小数的形式
             #   归一化
             # --------------------------------- #
@@ -263,19 +273,23 @@ if __name__ == '__main__':
             return anchor_boxes
 
     # 输入图片大小为300, 300
-    input_shape     = [300, 300] 
+    input_shape     = [300, 300]
     # 指定先验框的大小，即宽高
     anchors_size    = [30, 60, 111, 162, 213, 264, 315]
     # feature_heights   [38, 19, 10, 5, 3, 1]
     # feature_widths    [38, 19, 10, 5, 3, 1]
     feature_heights, feature_widths = get_vgg_output_length(input_shape[0], input_shape[1])
-    # 对先验框的数量进行一个指定 4，6
+    # 对先验框的数量进行一个指定 [1, 2]=>4，[1, 2, 3]=>6
     aspect_ratios                   = [[1, 2], [1, 2, 3], [1, 2, 3], [1, 2, 3], [1, 2], [1, 2]]
 
     anchors = []
     for i in range(len(feature_heights)):
-        anchors.append(AnchorBox_for_Vision(input_shape, anchors_size[i], max_size = anchors_size[i+1], 
-                    aspect_ratios = aspect_ratios[i]).call([feature_heights[i], feature_widths[i]]))
+        anchors.append(AnchorBox_for_Vision(
+                                            input_shape=input_shape,
+                                            min_size = anchors_size[i],     # 先验框短边,对于38x38,短边为30
+                                            max_size = anchors_size[i+1],   # 先验框长边,对于38x38,长边为60
+                                            aspect_ratios = aspect_ratios[i]
+                                            ).call([feature_heights[i], feature_widths[i]]))
 
     anchors = np.concatenate(anchors, axis=0)
     print(np.shape(anchors))

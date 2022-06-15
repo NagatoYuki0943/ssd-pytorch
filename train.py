@@ -1,3 +1,7 @@
+"""
+自己的数据集一定要修改 classes_path
+model_path 和 backbone 要一起修改
+"""
 import datetime
 import os
 import warnings
@@ -33,7 +37,7 @@ warnings.filterwarnings("ignore")
 2、损失值的大小用于判断是否收敛，比较重要的是有收敛的趋势，即验证集损失不断下降，如果验证集损失基本上不改变的话，模型基本上就收敛了。
    损失值的具体大小并没有什么意义，大和小只在于损失的计算方式，并不是接近于0才好。如果想要让损失好看点，可以直接到对应的损失函数里面除上10000。
    训练过程中的损失值会保存在logs文件夹下的loss_%Y_%m_%d_%H_%M_%S文件夹中
-   
+
 3、训练好的权值文件保存在logs文件夹中，每个训练世代（Epoch）包含若干训练步长（Step），每个训练步长（Step）进行一次梯度下降。
    如果只是训练了几个Step是不会保存的，Epoch和Step的概念要捋清楚一下。
 '''
@@ -65,7 +69,7 @@ if __name__ == "__main__":
     #---------------------------------------------------------------------#
     fp16            = False
     #---------------------------------------------------------------------#
-    #   classes_path    指向model_data下的txt，与自己训练的数据集相关 
+    #   classes_path    指向model_data下的txt，与自己训练的数据集相关
     #                   训练前一定要修改classes_path，使其对应自己的数据集
     #---------------------------------------------------------------------#
     classes_path    = 'model_data/voc_classes.txt'
@@ -76,7 +80,7 @@ if __name__ == "__main__":
     #
     #   如果训练过程中存在中断训练的操作，可以将model_path设置成logs文件夹下的权值文件，将已经训练了一部分的权值再次载入。
     #   同时修改下方的 冻结阶段 或者 解冻阶段 的参数，来保证模型epoch的连续性。
-    #   
+    #
     #   当model_path = ''的时候不加载整个模型的权值。
     #
     #   此处使用的是整个模型的权重，因此是在train.py进行加载的，下面的pretrain不影响此处的权值加载。
@@ -115,15 +119,15 @@ if __name__ == "__main__":
     #----------------------------------------------------------------------------------------------------------------------------#
     #   训练分为两个阶段，分别是冻结阶段和解冻阶段。设置冻结阶段是为了满足机器性能不足的同学的训练需求。
     #   冻结训练需要的显存较小，显卡非常差的情况下，可设置Freeze_Epoch等于UnFreeze_Epoch，此时仅仅进行冻结训练。
-    #      
+    #
     #   在此提供若干参数设置建议，各位训练者根据自己的需求进行灵活调整：
-    #   （一）从整个模型的预训练权重开始训练： 
+    #   （一）从整个模型的预训练权重开始训练：
     #       Adam：
     #           Init_Epoch = 0，Freeze_Epoch = 50，UnFreeze_Epoch = 100，Freeze_Train = True，optimizer_type = 'adam'，Init_lr = 6e-4，weight_decay = 0。（冻结）
     #           Init_Epoch = 0，UnFreeze_Epoch = 100，Freeze_Train = False，optimizer_type = 'adam'，Init_lr = 6e-4，weight_decay = 0。（不冻结）
     #       SGD：
-    #           Init_Epoch = 0，Freeze_Epoch = 50，UnFreeze_Epoch = 200，Freeze_Train = True，optimizer_type = 'sgd'，Init_lr = 2e-3，weight_decay = 5e-4。（冻结）
-    #           Init_Epoch = 0，UnFreeze_Epoch = 200，Freeze_Train = False，optimizer_type = 'sgd'，Init_lr = 2e-3，weight_decay = 5e-4。（不冻结）
+    #           Init_Epoch = 0，Freeze_Epoch = 50，UnFreeze_Epoch = 100，Freeze_Train = True，optimizer_type = 'sgd'，Init_lr = 2e-3，weight_decay = 5e-4。（冻结）
+    #           Init_Epoch = 0，UnFreeze_Epoch = 100，Freeze_Train = False，optimizer_type = 'sgd'，Init_lr = 2e-3，weight_decay = 5e-4。（不冻结）
     #       其中：UnFreeze_Epoch可以在100-300之间调整。
     #   （二）从主干网络的预训练权重开始训练：
     #       Adam：
@@ -253,7 +257,7 @@ if __name__ == "__main__":
     if pretrained:
         if distributed:
             if local_rank == 0:
-                download_weights(backbone)  
+                download_weights(backbone)
             dist.barrier()
         else:
             download_weights(backbone)
@@ -274,7 +278,7 @@ if __name__ == "__main__":
         #------------------------------------------------------#
         if local_rank == 0:
             print('Load weights {}.'.format(model_path))
-        
+
         #------------------------------------------------------#
         #   根据预训练权重的Key和模型的Key进行加载
         #------------------------------------------------------#
@@ -309,8 +313,8 @@ if __name__ == "__main__":
         log_dir         = os.path.join(save_dir, "loss_" + str(time_str))
         loss_history    = LossHistory(log_dir, model, input_shape=input_shape)
     else:
-        loss_history    = None
-        
+        loss_history = None
+
     #------------------------------------------------------------------#
     #   torch 1.2不支持amp，建议使用torch 1.7.1及以上正确使用fp16
     #   因此torch1.2这里显示"could not be resolve"
@@ -350,8 +354,8 @@ if __name__ == "__main__":
     with open(val_annotation_path, encoding='utf-8') as f:
         val_lines   = f.readlines()
     num_train   = len(train_lines)
-    num_val     = len(val_lines)   
-    
+    num_val     = len(val_lines)
+
     if local_rank == 0:
         show_config(
             classes_path = classes_path, model_path = model_path, input_shape = input_shape, \
@@ -361,7 +365,7 @@ if __name__ == "__main__":
         )
         #---------------------------------------------------------#
         #   总训练世代指的是遍历全部数据的总次数
-        #   总训练步长指的是梯度下降的总次数 
+        #   总训练步长指的是梯度下降的总次数
         #   每个训练世代包含若干训练步长，每个训练步长进行一次梯度下降。
         #   此处仅建议最低训练世代，上不封顶，计算时只考虑了解冻部分
         #----------------------------------------------------------#
@@ -380,7 +384,7 @@ if __name__ == "__main__":
     #   也可以在训练初期防止权值被破坏。
     #   Init_Epoch为起始世代
     #   Freeze_Epoch为冻结训练的世代
-    #   UnFreeze_Epoch总训练世代
+    #   Unfreeze_Epoch总训练世代
     #   提示OOM或者显存不足请调小Batch_size
     #------------------------------------------------------#
     if True:

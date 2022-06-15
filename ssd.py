@@ -1,3 +1,7 @@
+"""
+model_path ,classes_path, input_shape, confidence, nms_iou
+"""
+
 import colorsys
 import os
 import time
@@ -33,7 +37,7 @@ class SSD(object):
         #   验证集损失较低不代表mAP较高，仅代表该权值在验证集上泛化性能较好。
         #   如果出现shape不匹配，同时要注意训练时的model_path和classes_path参数的修改
         #--------------------------------------------------------------------------#
-        "model_path"        : 'model_data/ssd_weights.pth',
+        "model_path"        : 'model_data/mobilenetv2_ssd_weights.pth',
         "classes_path"      : 'model_data/voc_classes.txt',
         #---------------------------------------------------------------------#
         #   用于预测的图像大小，和train时使用同一个即可
@@ -43,13 +47,13 @@ class SSD(object):
         #   主干网络的选择
         #   vgg或者mobilenetv2
         #-------------------------------#
-        "backbone"          : "vgg",
+        "backbone"          : "mobilenetv2",
         #---------------------------------------------------------------------#
         #   只有得分大于置信度的预测框会被保留下来
         #---------------------------------------------------------------------#
         "confidence"        : 0.5,
         #---------------------------------------------------------------------#
-        #   非极大抑制所用到的nms_iou大小
+        #   非极大抑制所用到的nms_iou大小,越小代表越严格
         #---------------------------------------------------------------------#
         "nms_iou"           : 0.45,
         #---------------------------------------------------------------------#
@@ -57,7 +61,7 @@ class SSD(object):
         #---------------------------------------------------------------------#
         'anchors_size'      : [30, 60, 111, 162, 213, 264, 315],
         #---------------------------------------------------------------------#
-        #   该变量用于控制是否使用letterbox_image对输入图像进行不失真的resize，
+        #   该变量用于控制是否使用letterbox_image对输入图像进行不失真的resize(添加灰边为正方形)，
         #   在多次测试后，发现关闭letterbox_image直接resize的效果更好
         #---------------------------------------------------------------------#
         "letterbox_image"   : False,
@@ -90,7 +94,7 @@ class SSD(object):
         if self.cuda:
             self.anchors = self.anchors.cuda()
         self.num_classes                    = self.num_classes + 1
-        
+
         #---------------------------------------------------#
         #   画框设置不同的颜色
         #---------------------------------------------------#
@@ -157,7 +161,7 @@ class SSD(object):
             #-----------------------------------------------------------#
             #   将预测结果进行解码
             #-----------------------------------------------------------#
-            results     = self.bbox_util.decode_box(outputs, self.anchors, image_shape, self.input_shape, self.letterbox_image, 
+            results     = self.bbox_util.decode_box(outputs, self.anchors, image_shape, self.input_shape, self.letterbox_image,
                                                     nms_iou = self.nms_iou, confidence = self.confidence)
             #--------------------------------------#
             #   如果没有检测到物体，则返回原图
@@ -166,8 +170,9 @@ class SSD(object):
                 return image
 
             top_label   = np.array(results[0][:, 4], dtype = 'int32')
-            top_conf    = results[0][:, 5]
-            top_boxes   = results[0][:, :4]
+            # 切分预测结果
+            top_conf    = results[0][:, 5]  # 分数
+            top_boxes   = results[0][:, :4] # 位置
         #---------------------------------------------------------#
         #   设置字体与边框厚度
         #---------------------------------------------------------#
@@ -222,7 +227,7 @@ class SSD(object):
             label_size = draw.textsize(label, font)
             label = label.encode('utf-8')
             print(label, top, left, bottom, right)
-            
+
             if top - label_size[1] >= 0:
                 text_origin = np.array([left, top - label_size[1]])
             else:
@@ -270,7 +275,7 @@ class SSD(object):
             #-----------------------------------------------------------#
             #   将预测结果进行解码
             #-----------------------------------------------------------#
-            results     = self.bbox_util.decode_box(outputs, self.anchors, image_shape, self.input_shape, self.letterbox_image, 
+            results     = self.bbox_util.decode_box(outputs, self.anchors, image_shape, self.input_shape, self.letterbox_image,
                                                     nms_iou = self.nms_iou, confidence = self.confidence)
 
         t1 = time.time()
@@ -283,7 +288,7 @@ class SSD(object):
                 #-----------------------------------------------------------#
                 #   将预测结果进行解码
                 #-----------------------------------------------------------#
-                results     = self.bbox_util.decode_box(outputs, self.anchors, image_shape, self.input_shape, self.letterbox_image, 
+                results     = self.bbox_util.decode_box(outputs, self.anchors, image_shape, self.input_shape, self.letterbox_image,
                                                         nms_iou = self.nms_iou, confidence = self.confidence)
 
         t2 = time.time()
@@ -329,7 +334,7 @@ class SSD(object):
         print('Onnx model save as {}'.format(model_path))
     
     def get_map_txt(self, image_id, image, class_names, map_out_path):
-        f = open(os.path.join(map_out_path, "detection-results/"+image_id+".txt"),"w") 
+        f = open(os.path.join(map_out_path, "detection-results/"+image_id+".txt"),"w")
         #---------------------------------------------------#
         #   计算输入图片的高和宽
         #---------------------------------------------------#
@@ -369,12 +374,12 @@ class SSD(object):
             #   如果没有检测到物体，则返回原图
             #--------------------------------------#
             if len(results[0]) <= 0:
-                return 
+                return
 
             top_label   = np.array(results[0][:, 4], dtype = 'int32')
             top_conf    = results[0][:, 5]
             top_boxes   = results[0][:, :4]
-        
+
         for i, c in list(enumerate(top_label)):
             predicted_class = self.class_names[int(c)]
             box             = top_boxes[i]
@@ -387,4 +392,4 @@ class SSD(object):
             f.write("%s %s %s %s %s %s\n" % (predicted_class, score[:6], str(int(left)), str(int(top)), str(int(right)),str(int(bottom))))
 
         f.close()
-        return 
+        return

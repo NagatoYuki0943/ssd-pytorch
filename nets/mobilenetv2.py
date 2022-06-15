@@ -55,6 +55,8 @@ class MobileNetV2(nn.Module):
 
         if inverted_residual_setting is None:
             inverted_residual_setting = [
+                # 扩张,out_channel,重复次数,stride
+                # t, c, n, s
                 [1, 16, 1, 1],
                 [6, 24, 2, 2],
                 [6, 32, 3, 2],

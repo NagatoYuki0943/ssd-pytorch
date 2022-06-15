@@ -1,13 +1,14 @@
+"""
+训练,包含了损失函数
+"""
 import math
 from functools import partial
-
 import torch
 import torch.nn as nn
 
-
 class MultiboxLoss(nn.Module):
     def __init__(self, num_classes, alpha=1.0, neg_pos_ratio=3.0,
-                 background_label_id=0, negatives_for_hard=100.0):
+                background_label_id=0, negatives_for_hard=100.0):
         self.num_classes = num_classes
         self.alpha = alpha
         self.neg_pos_ratio = neg_pos_ratio
@@ -16,34 +17,43 @@ class MultiboxLoss(nn.Module):
         self.background_label_id = background_label_id
         self.negatives_for_hard = torch.FloatTensor([negatives_for_hard])[0]
 
+    # 框的损失:回归损失
     def _l1_smooth_loss(self, y_true, y_pred):
         abs_loss = torch.abs(y_true - y_pred)
         sq_loss = 0.5 * (y_true - y_pred)**2
         l1_loss = torch.where(abs_loss < 1.0, sq_loss, abs_loss - 0.5)
         return torch.sum(l1_loss, -1)
 
+    # 分类损失:交叉熵损失
     def _softmax_loss(self, y_true, y_pred):
         y_pred = torch.clamp(y_pred, min = 1e-7)
-        softmax_loss = -torch.sum(y_true * torch.log(y_pred),
-                                      axis=-1)
+        softmax_loss = -torch.sum(y_true * torch.log(y_pred), axis=-1)
         return softmax_loss
 
     def forward(self, y_true, y_pred):
+        """
+        要求三个损失:
+            正标签回归损失
+            正标签分类损失
+            比较难分类的负样本的损失
+        """
         # --------------------------------------------- #
         #   y_true batch_size, 8732, 4 + self.num_classes + 1
         #   y_pred batch_size, 8732, 4 + self.num_classes
         # --------------------------------------------- #
-        num_boxes       = y_true.size()[1]
-        y_pred          = torch.cat([y_pred[0], nn.Softmax(-1)(y_pred[1])], dim = -1)
+        num_boxes       = y_true.size()[1]                                              # 分类预测结果
+        y_pred          = torch.cat([y_pred[0], nn.Softmax(-1)(y_pred[1])], dim = -1)   # 回归预测结果
 
         # --------------------------------------------- #
         #   分类的loss
+        #   取出ture和pred中的 num_classes 部分进行交叉熵运算
         #   batch_size,8732,21 -> batch_size,8732
         # --------------------------------------------- #
         conf_loss = self._softmax_loss(y_true[:, :, 4:-1], y_pred[:, :, 4:])
-        
+
         # --------------------------------------------- #
-        #   框的位置的loss
+        #   框的位置的loss(回归损失)
+        #   取出ture和pred中的 前四个 部分进行回归损失运算
         #   batch_size,8732,4 -> batch_size,8732
         # --------------------------------------------- #
         loc_loss = self._l1_smooth_loss(y_true[:, :, :4],
@@ -51,11 +61,10 @@ class MultiboxLoss(nn.Module):
 
         # --------------------------------------------- #
         #   获取所有的正标签的loss
+        #   取出最后一位,表示是否是样本
         # --------------------------------------------- #
-        pos_loc_loss = torch.sum(loc_loss * y_true[:, :, -1],
-                                     axis=1)
-        pos_conf_loss = torch.sum(conf_loss * y_true[:, :, -1],
-                                      axis=1)
+        pos_loc_loss = torch.sum(loc_loss * y_true[:, :, -1], axis=1)   # 正标签回归损失
+        pos_conf_loss = torch.sum(conf_loss * y_true[:, :, -1], axis=1) # 正标签分类损失
 
         # --------------------------------------------- #
         #   每一张图的正样本的个数
@@ -64,18 +73,19 @@ class MultiboxLoss(nn.Module):
         num_pos = torch.sum(y_true[:, :, -1], axis=-1)
 
         # --------------------------------------------- #
-        #   每一张图的负样本的个数
+        #   每一张图的负样本的个数(必须有正负样本才能进行训练)
         #   num_neg     [batch_size,]
         # --------------------------------------------- #
         num_neg = torch.min(self.neg_pos_ratio * num_pos, num_boxes - num_pos)
-        # 找到了哪些值是大于0的
+        # 找到了哪些负样本值是大于0的
         pos_num_neg_mask = num_neg > 0
         # --------------------------------------------- #
         #   如果所有的图，正样本的数量均为0
         #   那么则默认选取100个先验框作为负样本
         # --------------------------------------------- #
         has_min = torch.sum(pos_num_neg_mask)
-        
+
+        # 下面是比较难分类的负样本的损失
         # --------------------------------------------- #
         #   从这里往后，与视频中看到的代码有些许不同。
         #   由于以前的负样本选取方式存在一些问题，
@@ -85,6 +95,7 @@ class MultiboxLoss(nn.Module):
         num_neg_batch = torch.sum(num_neg) if has_min > 0 else self.negatives_for_hard
 
         # --------------------------------------------- #
+        #   取出所有预测框不为背景的概率
         #   对预测结果进行判断，如果该先验框没有包含物体
         #   那么它的不属于背景的预测概率过大的话
         #   就是难分类样本
@@ -105,9 +116,9 @@ class MultiboxLoss(nn.Module):
         #   先验框作为负样本。
         # --------------------------------------------------- #
         max_confs   = (max_confs * (1 - y_true[:, :, -1])).view([-1])
-
+        # 取出最难分类的分类框
         _, indices  = torch.topk(max_confs, k = int(num_neg_batch.cpu().numpy().tolist()))
-
+        # 取出对应的损失函数
         neg_conf_loss = torch.gather(conf_loss.view([-1]), 0, indices)
 
         # 进行归一化

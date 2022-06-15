@@ -1,18 +1,21 @@
+"""
+数据预处理
+"""
+
+
 import cv2
 import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data.dataset import Dataset
-
 from utils.utils import cvtColor, preprocess_input
-
 
 class SSDDataset(Dataset):
     def __init__(self, annotation_lines, input_shape, anchors, batch_size, num_classes, train, overlap_threshold = 0.5):
         super(SSDDataset, self).__init__()
         self.annotation_lines   = annotation_lines
         self.length             = len(self.annotation_lines)
-        
+
         self.input_shape        = input_shape
         self.anchors            = anchors
         self.num_anchors        = len(anchors)
@@ -31,7 +34,9 @@ class SSDDataset(Dataset):
         #   验证时不进行数据的随机增强
         #---------------------------------------------------#
         image, box  = self.get_random_data(self.annotation_lines[index], self.input_shape, random = self.train)
+        # 数据预处理
         image_data  = np.transpose(preprocess_input(np.array(image, dtype = np.float32)), (2, 0, 1))
+        # 处理框
         if len(box)!=0:
             boxes               = np.array(box[:,:4] , dtype=np.float32)
             # 进行归一化，调整到0-1之间
@@ -40,6 +45,7 @@ class SSDDataset(Dataset):
             # 对真实框的种类进行one hot处理
             one_hot_label   = np.eye(self.num_classes - 1)[np.array(box[:,4], np.int32)]
             box             = np.concatenate([boxes, one_hot_label], axis=-1)
+        # 将真实框调整为相对于预测结果的样式
         box = self.assign_boxes(box)
 
         return np.array(image_data, np.float32), np.array(box, np.float32)
@@ -47,7 +53,18 @@ class SSDDataset(Dataset):
     def rand(self, a=0, b=1):
         return np.random.rand()*(b-a) + a
 
+    """
+    数据增强
+    """
     def get_random_data(self, annotation_line, input_shape, jitter=.3, hue=.1, sat=0.7, val=0.4, random=True):
+        """
+        annotation_line:
+        input_shape: 模型输入大小,如 [416, 416]
+        jitter: 调整图像长宽扭曲
+        hue:    色调
+        sat:    饱和度
+        val:    明度
+        """
         line = annotation_line.split()
         #------------------------------#
         #   读取图像并转换成RGB图像
@@ -65,7 +82,7 @@ class SSDDataset(Dataset):
         box     = np.array([np.array(list(map(int,box.split(',')))) for box in line[1:]])
 
         if not random:
-            scale = min(w/iw, h/ih)
+            scale = min(w/iw, h/ih) # scale控制图片缩放,边缘加上灰条
             nw = int(iw*scale)
             nh = int(ih*scale)
             dx = (w-nw)//2
@@ -94,7 +111,7 @@ class SSDDataset(Dataset):
                 box = box[np.logical_and(box_w>1, box_h>1)] # discard invalid box
 
             return image_data, box
-                
+
         #------------------------------------------#
         #   对图像进行缩放并且进行长和宽的扭曲
         #------------------------------------------#
@@ -158,8 +175,8 @@ class SSDDataset(Dataset):
             box[:, 3][box[:, 3]>h] = h
             box_w = box[:, 2] - box[:, 0]
             box_h = box[:, 3] - box[:, 1]
-            box = box[np.logical_and(box_w>1, box_h>1)] 
-        
+            box = box[np.logical_and(box_w>1, box_h>1)]
+
         return image_data, box
 
     def iou(self, box):
@@ -173,7 +190,7 @@ class SSDDataset(Dataset):
         inter_wh    = inter_botright - inter_upleft
         inter_wh    = np.maximum(inter_wh, 0)
         inter       = inter_wh[:, 0] * inter_wh[:, 1]
-        #---------------------------------------------# 
+        #---------------------------------------------#
         #   真实框的面积
         #---------------------------------------------#
         area_true = (box[2] - box[0]) * (box[3] - box[1])
@@ -189,6 +206,7 @@ class SSDDataset(Dataset):
         iou = inter / union
         return iou
 
+    # 计算当前真实框和先验框的重合情况
     def encode_box(self, box, return_iou=True, variances = [0.1, 0.1, 0.2, 0.2]):
         #---------------------------------------------#
         #   计算当前真实框和先验框的重合情况
@@ -196,8 +214,9 @@ class SSDDataset(Dataset):
         #   encoded_box [self.num_anchors, 5]
         #---------------------------------------------#
         iou = self.iou(box)
+        # 获得先验框编码后的结果
         encoded_box = np.zeros((self.num_anchors, 4 + return_iou))
-        
+
         #---------------------------------------------#
         #   找到每一个真实框，重合程度较高的先验框
         #   真实框可以由这个先验框来负责预测
@@ -210,13 +229,13 @@ class SSDDataset(Dataset):
         #---------------------------------------------#
         if not assign_mask.any():
             assign_mask[iou.argmax()] = True
-        
+
         #---------------------------------------------#
-        #   利用iou进行赋值 
+        #   利用iou进行赋值
         #---------------------------------------------#
         if return_iou:
             encoded_box[:, -1][assign_mask] = iou[assign_mask]
-        
+
         #---------------------------------------------#
         #   找到对应的先验框
         #---------------------------------------------#
@@ -233,20 +252,23 @@ class SSDDataset(Dataset):
         #---------------------------------------------#
         assigned_anchors_center = (assigned_anchors[:, 0:2] + assigned_anchors[:, 2:4]) * 0.5
         assigned_anchors_wh     = (assigned_anchors[:, 2:4] - assigned_anchors[:, 0:2])
-        
+
         #------------------------------------------------#
+        #   编码
         #   逆向求取ssd应该有的预测结果
         #   先求取中心的预测结果，再求取宽高的预测结果
         #   存在改变数量级的参数，默认为[0.1,0.1,0.2,0.2]
         #------------------------------------------------#
-        encoded_box[:, :2][assign_mask] = box_center - assigned_anchors_center
-        encoded_box[:, :2][assign_mask] /= assigned_anchors_wh
-        encoded_box[:, :2][assign_mask] /= np.array(variances)[:2]
+        encoded_box[:, :2][assign_mask] = box_center - assigned_anchors_center  # 1.减去先验框中心  过程和解码过程相反
+        encoded_box[:, :2][assign_mask] /= assigned_anchors_wh                  # 2.除以先验框宽高
+        encoded_box[:, :2][assign_mask] /= np.array(variances)[:2]              # 3.除以variances
 
-        encoded_box[:, 2:4][assign_mask] = np.log(box_wh / assigned_anchors_wh)
-        encoded_box[:, 2:4][assign_mask] /= np.array(variances)[2:4]
+        # 调整宽高
+        encoded_box[:, 2:4][assign_mask] = np.log(box_wh / assigned_anchors_wh) # 1.真实框宽高除以先验框宽高,取对数  过程和解码过程相反
+        encoded_box[:, 2:4][assign_mask] /= np.array(variances)[2:4]            # 2.除以variances中对应的参数
         return encoded_box.ravel()
 
+    # 将真实框调整为相对于预测结果的样式
     def assign_boxes(self, boxes):
         #---------------------------------------------------#
         #   assignment分为3个部分
@@ -254,7 +276,9 @@ class SSDDataset(Dataset):
         #   4:-1    的内容为先验框所对应的种类，默认为背景
         #   -1      的内容为当前先验框是否包含目标
         #---------------------------------------------------#
+        # num_anchors代表了图片所有的先验框,4代表先验框的调整参数,num_classes代表了种类,1代表先验框内是否包含物体
         assignment          = np.zeros((self.num_anchors, 4 + self.num_classes + 1))
+        # 假设所有的先验框都不包含物体
         assignment[:, 4]    = 1.0
         if len(boxes) == 0:
             return assignment
@@ -263,19 +287,20 @@ class SSDDataset(Dataset):
         encoded_boxes   = np.apply_along_axis(self.encode_box, 1, boxes[:, :4])
         #---------------------------------------------------#
         #   在reshape后，获得的encoded_boxes的shape为：
+        #    真实框        先验框
         #   [num_true_box, num_anchors, 4 + 1]
         #   4是编码后的结果，1为iou
         #---------------------------------------------------#
         encoded_boxes   = encoded_boxes.reshape(-1, self.num_anchors, 5)
-        
+
         #---------------------------------------------------#
         #   [num_anchors]求取每一个先验框重合度最大的真实框
         #---------------------------------------------------#
-        best_iou        = encoded_boxes[:, :, -1].max(axis=0)
-        best_iou_idx    = encoded_boxes[:, :, -1].argmax(axis=0)
-        best_iou_mask   = best_iou > 0
-        best_iou_idx    = best_iou_idx[best_iou_mask]
-        
+        best_iou        = encoded_boxes[:, :, -1].max(axis=0)       # 先验框和真实框的最大重合程度
+        best_iou_idx    = encoded_boxes[:, :, -1].argmax(axis=0)    # 先验框和真实框的最大重合序号
+        best_iou_mask   = best_iou > 0                              # 判断哪些先验框有真实框
+        best_iou_idx    = best_iou_idx[best_iou_mask]               # 取出有的序号
+
         #---------------------------------------------------#
         #   计算一共有多少先验框满足需求
         #---------------------------------------------------#
@@ -293,7 +318,7 @@ class SSDDataset(Dataset):
         assignment[:, 4][best_iou_mask]     = 0
         assignment[:, 5:-1][best_iou_mask]  = boxes[best_iou_idx, 4:]
         #----------------------------------------------------------#
-        #   -1表示先验框是否有对应的物体
+        #   -1表示先验框是否有对应的物体,1表示有物体
         #----------------------------------------------------------#
         assignment[:, -1][best_iou_mask]    = 1
         # 通过assign_boxes我们就获得了，输入进来的这张图片，应该有的预测结果是什么样子的
