@@ -115,7 +115,7 @@ class SSD300(nn.Module):
             self.extras     = add_extras(1024, backbone_name)
             self.L2Norm     = L2Norm(512, 20)
             mbox            = [4, 6, 6, 6, 4, 4]
-            
+
             loc_layers      = []
             conf_layers     = []
             out_channels    = [512, 1024]
@@ -130,7 +130,7 @@ class SSD300(nn.Module):
             #   在add_extras获得的特征层里
             #   第1层、第3层、第5层、第7层可以用来进行回归预测和分类预测。
             #   shape分别为(10,10,512), (5,5,256), (3,3,256), (1,1,256)
-            #-------------------------------------------------------------#  
+            #-------------------------------------------------------------#
             for k, v in enumerate(self.extras[1::2], 2):
                 loc_layers  += [nn.Conv2d(v.out_channels, mbox[k] * 4, kernel_size = 3, padding = 1)]
                 conf_layers += [nn.Conv2d(v.out_channels, mbox[k] * num_classes, kernel_size = 3, padding = 1)]

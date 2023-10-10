@@ -168,7 +168,7 @@ def resnet50(pretrained=False, **kwargs):
     model = ResNet(Bottleneck, [3, 4, 6, 3], **kwargs)
     if pretrained:
         model.load_state_dict(model_zoo.load_url('https://s3.amazonaws.com/pytorch/models/resnet50-19c8e357.pth', model_dir='model_data'), strict=False)
-    
+
     del model.avgpool
     del model.fc
     return model
